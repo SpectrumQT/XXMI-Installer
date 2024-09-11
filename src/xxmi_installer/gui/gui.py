@@ -43,6 +43,7 @@ class GUI(customtkinter.CTk):
                          lambda event: self.set_stage(Stage.Download))
         Events.Subscribe(Events.UpdateManager.InitializeInstallation,
                          lambda event: self.set_stage(Stage.Installation))
+
     def setup_window(self):
         if self.app.in_updater_mode():
             self.title("XXMI Launcher Updater")

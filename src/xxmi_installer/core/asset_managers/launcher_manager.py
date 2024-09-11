@@ -1,13 +1,9 @@
-import sys
-import shutil
 import winshell
 import pythoncom
 import subprocess
-import time
 
 from dataclasses import dataclass
 from pathlib import Path
-from win32api import GetFileVersionInfo, HIWORD, LOWORD
 
 import core.path_manager as Paths
 import core.event_manager as Events
@@ -53,17 +49,6 @@ class LauncherPackage(Package):
     def get_installed_version(self):
         return '0.0.0'
 
-    def get_version_number(self, file_path, max_parts=4):
-        version_info = GetFileVersionInfo(str(file_path), "\\")
-
-        ms_file_version = version_info['FileVersionMS']
-        ls_file_version = version_info['FileVersionLS']
-
-        version = [str(HIWORD(ms_file_version)), str(LOWORD(ms_file_version)),
-                   str(HIWORD(ls_file_version)), str(LOWORD(ls_file_version))]
-
-        return '.'.join(version[:max_parts])
-
     def install_latest_version(self, clean):
         Events.Fire(Events.UpdateManager.InitializeInstallation())
 
@@ -72,9 +57,6 @@ class LauncherPackage(Package):
         self.stop_launcher()
 
         self.unpack_downloaded_asset(installation_path)
-
-        if getattr(sys, 'frozen', False):
-            self.copy_self_to_resources()
 
         if self.manager_cfg.create_shortcut:
             self.create_shortcuts()
@@ -91,18 +73,6 @@ class LauncherPackage(Package):
                 message='Failed to terminate XXMI Launcher.exe!\n\n'
                         'Please close it manually and press [OK] to continue.',
             ))
-
-    def copy_self_to_resources(self):
-        Events.Fire(Events.UpdateManager.StartFileWrite(asset_name='XXMI-Installer.exe'))
-        assets_path = Path(self.manager_cfg.installation_dir) / 'Resources' / 'Packages' / 'Installer'
-        updater_path = assets_path / 'XXMI-Installer.exe'
-        if updater_path.exists():
-            updater_version = self.get_version_number(updater_path)
-            self_version = self.get_version_number(sys.executable)
-            if self_version <= updater_version:
-                return
-        assets_path.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(sys.executable, updater_path)
 
     def create_shortcuts(self):
         Events.Fire(Events.LauncherManager.StartCreateShortcuts())
