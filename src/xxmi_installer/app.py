@@ -101,7 +101,7 @@ class Application:
 
         self.launcher_manager = LauncherManager(LauncherManagerConfig(
             installation_dir=str(args.dist_dir),
-            create_shortcut=args.shortcut,
+            create_shortcut=args.shortcut and args.mode != Mode.Update,
             instance=self.instance,
         ))
 
