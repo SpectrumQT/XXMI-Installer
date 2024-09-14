@@ -9,6 +9,10 @@
   <a href="#license">License</a>
 </p>
 
+## DISCLAIMER
+
+- **XXMI Launcher** and all of its per-game packages are in active developement stage.
+
 ## Features  
 
 - **Automatic Installation** — Fully automatic XXMI Launcher installation
