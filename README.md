@@ -21,9 +21,8 @@
 
 1. Download the [latest release](https://github.com/SpectrumQT/XXMI-Installer/releases/latest) of **XXMI-Installer-vX.X.X.exe**
 2. Run **XXMI-Installer-vX.X.X.exe** with Double-Click.
-3. Select folder where you want **[XXMI Launcher](https://github.com/SpectrumQT/XXMI-Launcher)** and **XXMI Instance** with its **Mods** folder to be located.
-4. Press **[Download & Install]** button.
-5. Once installation is complete, **XXMI Launcher** window will open and install **XXMI** automatically.
+3. Click **[Quick Installation]** to download and install **[XXMI Launcher](https://github.com/SpectrumQT/XXMI-Launcher)**.
+4. Once installation is complete, **XXMI Launcher** window will open and install **XXMI** automatically.
 
 ## Supported Model Importers
 
