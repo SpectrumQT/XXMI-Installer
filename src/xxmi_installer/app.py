@@ -17,11 +17,13 @@ from pathlib import Path
 
 import core.path_manager as Paths
 import core.event_manager as Events
+import core.config_manager as Config
 
-from gui.gui import GUI
+from core.package_manager import PackageManager
 
-from core.asset_managers.launcher_manager import LauncherManager, LauncherManagerConfig
-from core.update_manager import UpdateManager, UpdateManagerConfig
+from core.packages.launcher_package import LauncherPackage
+
+from gui.windows.main.main_window import MainWindow
 
 
 class Mode(Enum):
@@ -36,7 +38,32 @@ class Mode(Enum):
 class ApplicationEvents:
 
     @dataclass
+    class ConfigUpdate:
+        pass
+
+    @dataclass
     class Ready:
+        pass
+
+    @dataclass
+    class Busy:
+        pass
+
+    @dataclass
+    class StatusUpdate:
+        status: str
+
+    @dataclass
+    class MoveWindow:
+        offset_x: int
+        offset_y: int
+
+    @dataclass
+    class Minimize:
+        pass
+
+    @dataclass
+    class Maximize:
         pass
 
     @dataclass
@@ -44,9 +71,17 @@ class ApplicationEvents:
         delay: int = 0
 
     @dataclass
-    class SettingsUpdate:
-        name: str
-        value: str
+    class Update:
+        no_install: bool = False
+        force: bool = False
+        reinstall: bool = False
+        packages: Union[list, None] = None
+        silent: bool = False
+        no_thread: bool = False
+
+    @dataclass
+    class CheckForUpdates:
+        pass
 
     @dataclass
     class WaitForProcess:
@@ -54,19 +89,12 @@ class ApplicationEvents:
 
     @dataclass
     class WaitForProcessExit:
-        asset_name: str
-
-    @dataclass
-    class Update:
-        no_install: bool = False
-        force: bool = False
-        reinstall: bool = False
-        packages: Union[list, None] = None
+        process_name: str
 
     @dataclass
     class ShowMessage:
         modal: bool = False
-        icon: str = 'messagebox-info-icon.ico'
+        icon: str = 'info-icon.ico'
         title: str = 'Message'
         message: str = '< Text >'
         confirm_text: str = 'OK'
@@ -78,14 +106,41 @@ class ApplicationEvents:
 
     @dataclass
     class ShowError(ShowMessage):
-        icon: str = 'messagebox-error-icon.ico'
+        icon: str = 'error-icon.ico'
         title: str = 'Error'
+
+    @dataclass
+    class ShowWarning(ShowMessage):
+        icon: str = 'warning-icon.ico'
+        title: str = 'Warning'
+
+    @dataclass
+    class ShowInfo(ShowMessage):
+        icon: str = 'info-icon.ico'
+        title: str = 'Info'
+
+    @dataclass
+    class ShowDialogue(ShowMessage):
+        confirm_text: str = 'Confirm'
+        cancel_text: str = 'Cancel'
+
+    @dataclass
+    class VerifyFileAccess:
+        path: Path
+        abs_path: bool = True
+        read: bool = True
+        write: bool = False
+        exe: bool = False
+
+    @dataclass
+    class InstallLauncher:
+        pass
 
 
 class Application:
-    def __init__(self, gui: GUI):
+    def __init__(self, app_gui: MainWindow):
         self.is_alive = True
-        self.gui = gui
+        self.gui = app_gui
         self.instance = self.get_instance()
 
         parser = argparse.ArgumentParser(description='Installs and updates XXMI Launcher')
@@ -95,42 +150,42 @@ class Application:
                             help='Launcher installation directory')
         parser.add_argument('-s', '--shortcut', type=bool, default=True, 
                             help='Default state of "Create Desktop Shortcut" checkbox')
-        args = parser.parse_args()
+        self.args = parser.parse_args()
 
-        self.mode = args.mode
+        Config.Config.load()
 
-        self.launcher_manager = LauncherManager(LauncherManagerConfig(
-            installation_dir=str(args.dist_dir),
-            create_shortcut=args.shortcut and args.mode != Mode.Update,
-            instance=self.instance,
-        ))
-
-        self.update_manager = UpdateManager(self, UpdateManagerConfig(), packages=[
-            self.launcher_manager.package,
-        ])
-
-        self.gui.initialize(self, args.mode)
+        Config.Launcher.installation_dir = str(self.args.dist_dir)
+        Config.Launcher.create_shortcut = self.args.shortcut and self.args.mode != Mode.Update
+        Config.Launcher.instance = self.instance
 
         self.threads = []
         self.error_queue = Queue()
 
-        Events.Subscribe(Events.Application.Update,
-                         lambda event: self.run_as_thread(self.update_manager.update_packages,
-                                                          no_install=event.no_install, force=event.force,
-                                                          reinstall=event.reinstall, packages=event.packages))
-        Events.Subscribe(Events.Application.Close, 
-                         lambda event: self.gui.after(event.delay, self.gui.stop))
+        self.mode = self.args.mode
 
-        if args.mode == Mode.Install:
+        self.packages = [
+            LauncherPackage(),
+        ]
+
+        self.package_manager = PackageManager(self.packages)
+
+        Events.Subscribe(Events.Application.InstallLauncher, lambda event: self.install_launcher())
+
+        self.gui.initialize()
+
+        if self.args.mode == Mode.Install:
             Events.Fire(Events.Application.Ready())
-        elif args.mode == Mode.Update:
-            Events.Fire(Events.Application.Update(force=True, reinstall=True))
+        elif self.args.mode == Mode.Update:
+            self.install_launcher()
             
         self.check_threads()
 
-        self.gui.start()
+        self.gui.open()
         
         self.exit()
+
+    def install_launcher(self):
+        self.run_as_thread(self.package_manager.update_packages, force=True, reinstall=True, packages=['Launcher'])
 
     def in_updater_mode(self):
         return self.mode == Mode.Update
@@ -146,7 +201,7 @@ class Application:
         for pattern, instance in instances.items():
             if len(re.compile(pattern).findall(exe_name)):
                 return instance
-        return 'WWMI'
+        return None
 
     def run_as_thread(self, callback, *args, **kwargs):
         def wrap_errors(func, *func_args, **func_kwargs):
@@ -218,6 +273,7 @@ class Application:
             except Empty:
                 break
         logging.debug(f'App Exit')
+        os._exit(os.EX_OK)
         
 
 if __name__ == '__main__':
@@ -239,13 +295,12 @@ if __name__ == '__main__':
 
     logging.debug(f'App Start')
 
-    gui = GUI()
-
     try:
+        gui = MainWindow()
         Application(gui)
     except Exception as e:
         logging.exception(e)
-        gui.show_messagebox(Events.Application.ShowError(
+        MainWindow().show_messagebox(Events.Application.ShowError(
             modal=True,
             screen_center=True,
             lock_master=False,

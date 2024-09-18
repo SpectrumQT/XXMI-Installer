@@ -21,7 +21,7 @@ def assert_path(directory_path: Path):
 
 def verify_path(directory_path: Path):
     if not directory_path.exists():
-        assert_path(directory_path.parent)
+        verify_path(directory_path.parent)
     else:
         if not directory_path.is_dir():
             raise ValueError(f"Path '{directory_path}' is not a folder!")
@@ -30,11 +30,18 @@ def verify_path(directory_path: Path):
     assert_path(directory_path)
 
 
+def can_create_dir(directory_path: Path):
+    if directory_path.is_dir():
+        assert_path(directory_path)
+    else:
+        can_create_dir(directory_path.parent)
+
+
 @dataclass
 class Paths:
     Root: Path = Path('')
     Resources: Path = Path('Resources')
-    Downloads: Path = Path('Downloads')
+    Themes: Path = Path('Resources/Themes')
 
     def set_root_path(self, root_path: Path):
         for field in fields(self):
