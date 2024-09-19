@@ -296,6 +296,7 @@ if __name__ == '__main__':
     logging.debug(f'App Start')
 
     try:
+        # raise ValueError('1\n2\n3')
         gui = MainWindow()
         Application(gui)
     except Exception as e:
