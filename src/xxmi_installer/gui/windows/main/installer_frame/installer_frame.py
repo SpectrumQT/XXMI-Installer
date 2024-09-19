@@ -85,7 +85,7 @@ class InstallButton(MainActionButton):
             text='Quick Installation',
             text_x_offset=0,
             text_y_offset=-1,
-            font=('Microsoft YaHei', 14, 'bold'),
+            font=('Microsoft YaHei', 19, 'bold'),
             command=self.install,
             master=master)
         self.subscribe(Events.GUI.InstallerFrame.StageUpdate, self.handle_stage_update)
@@ -111,7 +111,7 @@ class CustomInstallationButton(MainActionButton):
             text='Custom Installation',
             text_x_offset=0,
             text_y_offset=-1,
-            font=('Microsoft YaHei', 11),
+            font=('Microsoft YaHei', 15),
             command=lambda: Events.Fire(Events.GUI.InstallerFrame.StageUpdate(Stage.CustomInstall)),
             fill='#dddddd',
             activefill='#ffffff',

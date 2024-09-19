@@ -1,6 +1,7 @@
 import sys
 import logging
 import tkinter
+import re
 
 from typing import Union, Tuple, List, Dict, Optional, Callable
 from pathlib import Path
@@ -8,7 +9,7 @@ from pathlib import Path
 from tkinter import Menu, INSERT
 from customtkinter import CTkBaseClass, CTkButton, CTkImage, CTkLabel, CTkProgressBar, CTkEntry, CTkCheckBox, CTkTextbox, CTkOptionMenu
 from customtkinter import END, CURRENT
-from customtkinter import ThemeManager
+from customtkinter import ThemeManager, CTkFont
 from PIL import Image, ImageTk
 
 import core.config_manager as Config
@@ -51,8 +52,23 @@ class UIText(UIWidget, CTkBaseClass):
         self.fill = fill
         self.activefill = activefill
         self.disabledfill = disabledfill
+
+        if isinstance(font, str):
+            font_pattern = re.compile(r'(?P<family>.*)\s(?P<size>\d+)\s*(?P<weight>.*)?')
+            result = list(re.finditer(font_pattern, font))
+            if len(result) != 1:
+                raise ValueError(f'Failed to parse font from {font}!')
+            font = result[0].groupdict()
+            if font['weight']:
+                font = (font['family'], int(font['size']), font['weight'])
+            else:
+                font = (font['family'], int(font['size']))
+
+        self._font = CTkFont() if font is None else self._check_font_type(font)
+        self._font = self._apply_font_scaling(self._font)
+
         self._text_id = self.canvas.create_text(0, 0, fill=fill, activefill=activefill, disabledfill=disabledfill,
-                                                     justify=justify, state=state, tags=tags, width=width, font=font, **kwargs)
+                                                     justify=justify, state=state, tags=tags, width=width, font=self._font, **kwargs)
         self.move(x, y)
 
     def move(self, x, y):
@@ -406,12 +422,14 @@ class UIButton(UIWidget, CTkButton):
 
         self.is_hovered = False
 
+        self._text_color_hovered =None
         if 'text_color_hovered' in kwargs:
             self._text_color_hovered = kwargs.pop('text_color_hovered')
-        else:
-            self._text_color_hovered = kwargs.get('text_color', 'white')
 
         CTkButton.__init__(self, master, image=self.image, **kwargs)
+
+        if not self._text_color_hovered:
+            self._text_color_hovered = self._text_color
 
         self.unbind('<Button-1>')
 
@@ -589,12 +607,14 @@ class UICheckbox(CTkCheckBox, UIWidget):
 
         self.is_hovered = False
 
+        self._text_color_hovered = None
         if 'text_color_hovered' in kwargs:
             self._text_color_hovered = kwargs.pop('text_color_hovered')
-        else:
-            self._text_color_hovered = kwargs.get('text_color', 'white')
 
         CTkCheckBox.__init__(self, master, **kwargs)
+
+        if not self._text_color_hovered:
+            self._text_color_hovered = self._text_color
 
         self.unbind('<Button-1>')
 

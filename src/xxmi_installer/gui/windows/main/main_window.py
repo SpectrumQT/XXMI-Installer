@@ -9,7 +9,7 @@ from customtkinter import set_appearance_mode, set_default_color_theme
 
 from gui.windows.message_window import MessageWindow
 
-from gui.classes.windows import UIMainWindow
+from gui.classes.windows import UIMainWindow, limit_scaling
 
 from gui.events import Stage
 from gui.windows.main.installer_frame.installer_frame import InstallerFrame
@@ -22,17 +22,33 @@ log = logging.getLogger(__name__)
 # set_widget_scaling(2)
 # set_window_scaling(2)
 # deactivate_automatic_dpi_awareness()
+# Limit automatic scaling in a way to fit arbitrary width and height on screen
+limit_scaling(1280, 720)
 
 
 class MainWindow(UIMainWindow):
     def __init__(self):
         super().__init__()
         self.hide()
+
+        # Set appearance mode to same as one of user OS
         set_appearance_mode('System')
+        # Fix pyglet font load
+        pyglet.options['win32_gdi_font'] = True
+
+        # Load custom tkinter theme
+        try:
+            set_default_color_theme(str(Paths.App.Themes / 'Default' / 'custom-tkinter-theme.json'))
+        except Exception as e:
+            log.exception(e)
+
+        # Load custom fonts
+        try:
+            pyglet.font.add_file(str(Paths.App.Themes / 'Default' / 'Fonts' / 'Asap.ttf'))
+        except Exception as e:
+            log.exception(e)
 
     def initialize(self):
-        set_default_color_theme(str(Paths.App.Themes / 'Default' / 'custom-tkinter-theme.json'))
-
         Events.Subscribe(Events.Application.ShowMessage,
                          lambda event: self.show_messagebox(event))
         Events.Subscribe(Events.Application.ShowError,
@@ -43,9 +59,6 @@ class MainWindow(UIMainWindow):
                          lambda event: self.show_messagebox(event))
 
         import gui.vars as Vars
-
-        pyglet.options['win32_gdi_font'] = True
-        pyglet.font.add_file(str(Paths.App.Themes / 'Default' / 'Fonts' / 'Asap.ttf'))
 
         Vars.Settings.initialize(Config.Config, self)
         Vars.Settings.load()
