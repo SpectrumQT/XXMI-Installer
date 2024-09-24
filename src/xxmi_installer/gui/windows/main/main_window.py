@@ -118,6 +118,12 @@ class MainWindow(UIMainWindow):
             return messagebox.response
 
         else:
+            if event.lock_master is None:
+                event.lock_master = self.is_shown()
+
+            if event.screen_center is None:
+                event.screen_center = not self.is_shown()
+
             messagebox = self.put(ErrorFrame(self, icon=event.icon, canvas=self.installer_frame.canvas,
                                     title=event.title, message=event.message,
                                     confirm_text=event.confirm_text, confirm_command=event.confirm_command,
