@@ -66,7 +66,6 @@ class UIText(UIWidget, CTkBaseClass):
 
         self._font = CTkFont() if font is None else self._check_font_type(font)
         self._font = self._apply_font_scaling(self._font)
-
         self._text_id = self.canvas.create_text(0, 0, fill=fill, activefill=activefill, disabledfill=disabledfill,
                                                      justify=justify, state=state, tags=tags, width=width, font=self._font, **kwargs)
         self.move(x, y)
@@ -496,20 +495,36 @@ class UIEntry(CTkEntry, UIWidget):
         self.state_id = -1
 
         self.bind("<Key>", self.initialize_state_log)
+        self.bind("<Control-KeyPress>", self.handle_key_press)
         self.bind("<KeyRelease>", self.add_state)
         self.bind("<<Cut>>", lambda event: self.after(200, self.add_state))
-        self.bind("<Control-z>", self.undo)
-        self.bind("<Control-y>", self.redo)
         self.bind("<Button-3>", self.handle_button3)
         self.bind("<<Paste>>", self.paste_to_selection)
 
         self.context_menu = Menu(self, tearoff=0)
+        self.context_menu.config(font=self._apply_font_scaling(('Asap', 14)))
         self.context_menu.add_command(label="Cut")
         self.context_menu.add_command(label="Copy")
         self.context_menu.add_command(label="Paste")
 
     def event_generate(self, *args, **kwargs):
         self._entry.event_generate(*args, **kwargs)
+
+    def handle_key_press(self, event):
+        if event.keycode == 65 and event.keysym.lower() != 'a':
+            event.widget.event_generate("<<SelectAll>>")
+        elif event.keycode == 67 and event.keysym.lower() != 'c':
+            event.widget.event_generate("<<Copy>>")
+        elif event.keycode == 86 and event.keysym.lower() != 'v':
+            event.widget.event_generate("<<Paste>>")
+        elif event.keycode == 88 and event.keysym.lower() != 'x':
+            event.widget.event_generate("<<Cut>>")
+        elif event.keycode == 89:
+            self.redo()
+        elif event.keycode == 90:
+            self.undo()
+        elif event.keycode == 65535:
+            event.widget.event_generate("<<Clear>>")
 
     def destroy(self):
         # Remove default write-trace callback for textvariable if exists
@@ -565,12 +580,19 @@ class UIEntry(CTkEntry, UIWidget):
         # print(f'ADD State {self.state_id} ({self.get_state()}) STATES: {self.state_log}')
 
     def paste_to_selection(self, event):
+        clipboard = ''
+        try:
+            clipboard = event.widget.clipboard_get()
+        except:
+            pass
+        if not clipboard:
+            return 'break'
         self.initialize_state_log()
         try:
             event.widget.delete('sel.first', 'sel.last')
         except:
             pass
-        event.widget.insert('insert', event.widget.clipboard_get())
+        event.widget.insert('insert', clipboard)
         self.add_state()
         return 'break'
 
@@ -763,9 +785,18 @@ class UITextbox(CTkTextbox, UIWidget):
                  **kwargs):
         UIWidget.__init__(self, master,  **kwargs)
         CTkTextbox.__init__(self, master, **kwargs)
+
+        self.context_menu = Menu(self, tearoff=0)
+        self.context_menu.config(font=self._apply_font_scaling(('Asap', 14)))
+        self.context_menu.add_command(label="Cut")
+        self.context_menu.add_command(label="Copy")
+        self.context_menu.add_command(label="Paste")
+
         self.text_variable = text_variable
-        self.trace_write(text_variable, self.handle_extra_libraries_update)
+        self.trace_write(text_variable, self.handle_text_variable_update)
+        self.bind("<Control-KeyPress>", self.handle_key_press)
         self.bind('<KeyRelease>', self.handle_on_widget_change)
+        self.bind("<Button-3>", self.handle_button3)
 
     def set(self, value):
         self.delete(1.0, END)
@@ -774,6 +805,31 @@ class UITextbox(CTkTextbox, UIWidget):
     def handle_on_widget_change(self, event=None):
         self.text_variable.set(self.get(0.0, END))
 
-    def handle_extra_libraries_update(self, var, val):
+    def handle_text_variable_update(self, var, val):
         if val != self.get(0.0, END):
             self.set(val)
+
+    def handle_key_press(self, event):
+        if event.keycode == 65 and event.keysym.lower() != 'a':
+            event.widget.event_generate("<<SelectAll>>")
+        elif event.keycode == 67 and event.keysym.lower() != 'c':
+            event.widget.event_generate("<<Copy>>")
+        elif event.keycode == 86 and event.keysym.lower() != 'v':
+            event.widget.event_generate("<<Paste>>")
+        elif event.keycode == 88 and event.keysym.lower() != 'x':
+            event.widget.event_generate("<<Cut>>")
+        elif event.keycode == 89 and event.keysym.lower() != 'y':
+            event.widget.event_generate("<<Redo>>")
+        elif event.keycode == 90 and event.keysym.lower() != 'z':
+            event.widget.event_generate("<<Undo>>")
+        elif event.keycode == 65535:
+            event.widget.event_generate("<<Clear>>")
+
+    def handle_button3(self, event=None):
+        self.show_context_menu(event)
+
+    def show_context_menu(self, event):
+        self.context_menu.post(event.x_root, event.y_root)
+        self.context_menu.entryconfigure('Cut', command=lambda: self._textbox.event_generate('<<Cut>>'))
+        self.context_menu.entryconfigure('Copy', command=lambda: self._textbox.event_generate('<<Copy>>'))
+        self.context_menu.entryconfigure('Paste', command=lambda: self._textbox.event_generate('<<Paste>>'))
