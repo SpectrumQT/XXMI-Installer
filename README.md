@@ -17,7 +17,7 @@
 
 - **Automatic Installation** — Fully automatic XXMI Launcher installation
 
-![xxmi-installer](https://github.com/SpectrumQT/XXMI-Installer/blob/main/public-media/XXMI%20Installer.jpg)
+![xxmi-installer](https://github.com/SpectrumQT/XXMI-Installer/blob/main/public-media/XXMI%20Installer.png)
 
 ## Installation
 
