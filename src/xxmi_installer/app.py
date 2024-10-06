@@ -155,7 +155,7 @@ class Application:
         Config.Config.load()
 
         Config.Launcher.installation_dir = str(self.args.dist_dir)
-        Config.Launcher.create_shortcut = self.args.shortcut and self.args.mode != Mode.Update
+        # Config.Launcher.create_shortcut = self.args.shortcut and self.args.mode != Mode.Update
         Config.Launcher.instance = self.instance
 
         self.threads = []
