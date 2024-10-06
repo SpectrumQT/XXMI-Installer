@@ -46,7 +46,7 @@ class LauncherPackage(Package):
             github_repo_owner='SpectrumQT',
             github_repo_name='XXMI-Launcher',
             asset_version_pattern=r'.*(\d\.\d\.\d).*',
-            asset_name_format='XXMI-LAUNCHER-PACKAGE-v%s.zip',
+            asset_name_format='XXMI-Launcher-Installer-Online-v%s.msi',
             signature_pattern=r'^## Signature[\r\n]+- ((?:[A-Za-z0-9+\/]{4})*(?:[A-Za-z0-9+\/]{4}|[A-Za-z0-9+\/]{3}=|[A-Za-z0-9+\/]{2}={2})$)',
             signature_public_key='MHYwEAYHKoZIzj0CAQYFK4EEACIDYgAEYac352uRGKZh6LOwK0fVDW/TpyECEfnRtUp+bP2PJPP63SWOkJ3a/d9pAnPfYezRVJ1hWjZtpRTT8HEAN/b4mWpJvqO43SAEV/1Q6vz9Rk/VvRV3jZ6B/tmqVnIeHKEb',
             exit_after_update=True,
@@ -66,13 +66,22 @@ class LauncherPackage(Package):
 
         self.stop_launcher()
 
-        Events.Fire(Events.Application.StatusUpdate(status='Deploying files...'))
-        self.move_contents(self.downloaded_asset_path, Path(Config.Launcher.installation_dir))
+        Events.Fire(Events.PackageManager.InitializeInstallation())
 
-        if Config.Launcher.create_shortcut:
-            self.create_shortcut()
+        Events.Fire(Events.LauncherManager.StartLauncher(asset_name=self.downloaded_asset_path.name))
 
-        self.start_launcher()
+        shortcuts_property = 'CheckBox' if Config.Launcher.create_shortcut else ''
+
+        subprocess.Popen(f'msiexec /i "{self.downloaded_asset_path}" /qr APPDIR="{Path(Config.Launcher.installation_dir)}" CREATE_SHORTCUTS="{shortcuts_property}"', shell=True)
+
+        installer_process_name = 'EnhancedUI.exe'
+
+        Events.Fire(Events.Application.WaitForProcess(process_name=installer_process_name))
+
+        result, pid = wait_for_process(installer_process_name, with_window=True, timeout=15)
+        if result == WaitResult.Timeout:
+            raise ValueError(f'Failed to start {self.downloaded_asset_path.name}!\n\n'
+                             f'Was it blocked by Antivirus software or security settings?')
 
     def assert_installation_folder(self, installation_folder: str):
         installation_path = Path(installation_folder)

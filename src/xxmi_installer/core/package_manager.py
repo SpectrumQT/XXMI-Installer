@@ -42,6 +42,7 @@ class PackageMetadata:
 class PackageConfig:
     latest_version: str = ''
     skipped_version: str = ''
+    deployed_version: str = ''
     update_check_time: int = 0
 
 
@@ -54,7 +55,7 @@ class Manifest:
         return json.dumps(asdict(self), indent=4)
 
     def from_json(self, file_path: Path):
-        with open(file_path, 'r') as f:
+        with open(file_path, 'r', encoding='utf-8') as f:
             for key, value in from_dict(data_class=Manifest, data=json.load(f)).__dict__.items():
                 if hasattr(self, key):
                     setattr(self, key, value)
@@ -85,12 +86,24 @@ class Package:
         raise NotImplementedError(f'Method "get_installed_version" is not implemented for package {self.metadata.package_name}!')
 
     def get_last_installed_version(self):
+        installed_version = self.get_installed_version()
         try:
+            # If detected version is different from the last deployed one, use it as result
+            # It allows to reinstall update when user either:
+            # * Replaced already deployed folder with one containing older package version
+            # * Changed location of already deployed package to folder with older package version
+            if installed_version != self.cfg.deployed_version:
+                return installed_version
+            # If installed and deployed version matches, we'll use one from... the manifest of last downloaded version
+            # It allows us to mitigate major potential distribution error of version mismatch between:
+            # * Package version parsed from update filename
+            # * Package version detected with self.get_installed_version() from update contents
+            # (otherwise automatic update will try to "update" package with such mismatch on every startup)
             self.load_manifest()
             return self.manifest.version
         except Exception as e:
             try:
-                return self.get_installed_version()
+                return installed_version
             except Exception as e:
                 pass
         return ''
@@ -163,9 +176,10 @@ class Package:
         Events.Fire(Events.Application.Busy())
 
         tmp_path = self.package_path / 'TMP'
+        shutil.rmtree(tmp_path, ignore_errors=True)
         Paths.verify_path(tmp_path)
 
-        if asset_file_name.endswith('.zip'):
+        if asset_file_name.endswith('.zip') or asset_file_name.endswith('.msi'):
             asset_path = tmp_path / asset_file_name
         elif asset_file_name.endswith('.exe'):
             asset_path = tmp_path / self.metadata.deploy_name
@@ -175,7 +189,7 @@ class Package:
         if asset_path.suffix == '.zip':
             self.unpack(asset_path, tmp_path / self.metadata.deploy_name)
             self.downloaded_asset_path = tmp_path
-        elif asset_path.suffix == '.exe':
+        elif asset_path.suffix == '.exe' or asset_path.suffix == '.msi':
             self.downloaded_asset_path = asset_path
 
         manifest_path = tmp_path / f'Manifest.json'
@@ -192,7 +206,7 @@ class Package:
             version=str(version),
             signatures={asset_path.name: signature},
         )
-        with open(self.package_path / f'Manifest.json', 'w') as f:
+        with open(self.package_path / f'Manifest.json', 'w', encoding='utf-8') as f:
             f.write(manifest.as_json())
 
     def load_manifest(self):
@@ -211,14 +225,19 @@ class Package:
             self.load_manifest()
         if not file_path.exists():
             raise ValueError(f'{self.metadata.package_name} package is missing critical file: {file_path.name}!\n')
-        signature = self.manifest.signatures.get(file_path.name, None)
-        if signature is None:
-            raise ValueError(f'{self.metadata.package_name} manifest file is missing signature for {file_path.name}!\n')
         with open(file_path, 'rb') as f:
-            if self.security.verify(signature, f.read()):
+            if self.security.verify(self.get_signature(file_path), f.read()):
                 return True
             else:
                 raise ValueError(f'File {file_path.name} signature is invalid!')
+
+    def get_signature(self, file_path: Path):
+        if self.manifest is None:
+            self.load_manifest()
+        signature = self.manifest.signatures.get(file_path.name, None)
+        if signature is None:
+            raise ValueError(f'{self.metadata.package_name} manifest file is missing signature for {file_path.name}!\n')
+        return signature
 
     def validate_files(self, file_paths: List[Path]):
         for file_path in file_paths:
@@ -246,11 +265,11 @@ class Package:
         file_path.unlink()
 
     def move(self, source_path: Path, destination_path: Path):
-        # Events.Fire(Events.PackageManager.StartFileMove(asset_name=source_path.name))
+        Events.Fire(Events.PackageManager.StartFileMove(asset_name=source_path.name))
         if destination_path.exists():
-            # time.sleep(0.01)
+            time.sleep(0.01)
             destination_path.unlink()
-        time.sleep(0.001)
+        time.sleep(0.01)
         shutil.move(source_path, destination_path)
 
     def move_contents(self, source_path: Path, destination_path: Path):
@@ -260,7 +279,7 @@ class Package:
                 self.move(src_path, destination_path / src_path.name)
             else:
                 self.move_contents(src_path, destination_path / src_path.name)
-        time.sleep(0.001)
+        time.sleep(0.01)
         shutil.rmtree(source_path)
 
     def get_file_version(self, file_path, max_parts=4):
@@ -275,9 +294,13 @@ class Package:
         return '.'.join(version[:max_parts])
 
     def update(self, clean=False):
+        if not self.download_url:
+            self.detect_latest_version()
         self.download_latest_version()
         self.install_latest_version(clean=clean)
+        self.load_manifest()
         self.detect_installed_version()
+        self.cfg.deployed_version = self.installed_version
 
     def subscribe(self, event, callback):
         Events.Subscribe(event, callback, caller_id=self)
@@ -381,6 +404,9 @@ class PackageManager:
         package.load()
         # Detect installed version to do a basic integrity check
         package.detect_installed_version()
+        # Mark installed version as deployed on empty deployed version record
+        if not package.cfg.deployed_version:
+            package.cfg.deployed_version = package.installed_version
 
     def unload_package(self, package: Union[Package, str]):
         package = self.get_package(package)
@@ -406,7 +432,14 @@ class PackageManager:
             },
         )
 
-    def notify_package_versions(self):
+    def detect_package_versions(self):
+        for package_name, package in self.packages.items():
+            if package.active:
+                package.detect_installed_version()
+
+    def notify_package_versions(self, detect_installed: bool = False):
+        if detect_installed:
+            self.detect_package_versions()
         Events.Fire(self.get_version_notification())
 
     def update_available(self):
@@ -414,57 +447,57 @@ class PackageManager:
             if package.update_available():
                 return True
 
-    def update_packages(self, no_install=False, force=False, reinstall=False, packages=None, silent=False):
+    def update_packages(self, no_install=False, no_check=False, force=False, reinstall=False, packages=None, silent=False):
+        log.debug(f'Initializing packages update (no_install={no_install}, no_check={no_check}, force={force}, reinstall={reinstall}, silent={silent}, packages={packages})...')
+
         if self.update_running:
+            log.debug(f'Packages update canceled: update is already in process!')
             return
         self.update_running = True
         self.api_connection_refused = False
 
-        # no_install = True
         if not silent:
             Events.Fire(Events.Application.Busy())
             Events.Fire(Events.PackageManager.StartCheckUpdate())
 
-        # time.sleep(1)
+        try:
+            for package_name, package in self.packages.items():
 
-        for package_name, package in self.packages.items():
+                # Skip package processing if it's not active, intended for multiple model importers support
+                if not package.active:
+                    continue
 
-            # Skip package processing if it's not active, intended for multiple model importers support
-            if not package.active:
-                continue
+                # Skip package processing if it's name isn't listed in provided package list
+                if packages is not None and package_name not in packages:
+                    continue
 
-            # Skip package processing if it's name isn't listed in provided package list
-            if packages is not None and package_name not in packages:
-                continue
+                # Download and install the latest package version, it can take a while
+                updated = self.update_package(package, no_install=no_install, no_check=no_check, force=force, reinstall=reinstall)
 
-            # Download and install the latest package version, it can take a while
-            updated = self.update_package(package, no_install=no_install, force=force, reinstall=reinstall)
+                if no_install:
+                    continue
 
-            # Download and install the latest versions of package dependencies
-            for required_package in package.metadata.dependencies:
-                required_package = self.get_package(required_package)
-                required_package.metadata.installation_path = package.metadata.installation_path
-                self.update_package(required_package, no_install=no_install, force=force, reinstall=reinstall)
+                if package.metadata.exit_after_update and updated:
+                    Events.Fire(Events.Application.Close(delay=500))
+                    return
 
-            if no_install:
-                continue
+            if self.api_connection_refused and not self.api_connection_refused_notified:
+                self.api_connection_refused_notified = True
+                raise ConnectionRefusedError(f'GitHub update requests limit reached!\n\nAttempts will be ignored for an hour.')
 
-            if package.metadata.exit_after_update and updated:
-                Events.Fire(Events.Application.Close(delay=500))
-                return
+        except Exception as e:
+            if silent:
+                log.exception(e)
+            else:
+                raise e
 
-        self.notify_package_versions()
+        finally:
+            self.update_running = False
+            self.notify_package_versions()
+            if not silent:
+                Events.Fire(Events.Application.Ready())
 
-        self.update_running = False
-
-        if not silent:
-            Events.Fire(Events.Application.Ready())
-
-        if self.api_connection_refused and not self.api_connection_refused_notified:
-            self.api_connection_refused_notified = True
-            raise ConnectionRefusedError(f'GitHub update requests limit reached!\n\nAttempts will be ignored for an hour.')
-
-    def update_package(self, package: Package, no_install=False, force=False, reinstall=False):
+    def update_package(self, package: Package, no_install=False, no_check=False, force=False, reinstall=False):
         # Check if installation is pending, as we'll need download url from update check
         install = not no_install and (package.update_available() or reinstall) and (Config.Launcher.auto_update or force)
 
@@ -474,7 +507,7 @@ class PackageManager:
         # Query GitHub for the latest available package version
         current_time = int(time.time())
         # Force update check if installation is pending or the last check time is somewhere in the future
-        force_check = force or install or package.cfg.update_check_time > current_time
+        force_check = not no_check and (force or install or package.cfg.update_check_time > current_time)
         # We're going to throttle query to 1 per hour by default, else user can be temporary banned by GitHub
         if force_check or package.cfg.update_check_time + 3600 < current_time:
             package.cfg.update_check_time = current_time
