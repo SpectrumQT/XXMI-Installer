@@ -72,7 +72,7 @@ class LauncherPackage(Package):
 
         shortcuts_property = 'CheckBox' if Config.Launcher.create_shortcut else ''
 
-        subprocess.Popen(f'msiexec /i "{self.downloaded_asset_path}" /qr APPDIR="{Path(Config.Launcher.installation_dir)}" CREATE_SHORTCUTS="{shortcuts_property}"', shell=True)
+        subprocess.Popen(f'msiexec /i "{self.downloaded_asset_path}" /qr /norestart APPDIR="{Path(Config.Launcher.installation_dir)}" CREATE_SHORTCUTS="{shortcuts_property}"', shell=True)
 
         installer_process_name = 'EnhancedUI.exe'
 
