@@ -18,7 +18,7 @@ if __name__ == '__main__':
         root_path = Path().resolve()
         log_name = root_path.name
 
-    logging.basicConfig(filename=root_path / f'{log_name}-Log.txt',
+    logging.basicConfig(filename=Path(sys.executable).parent / f'{log_name}-Log.txt',
                         encoding='utf-8',
                         filemode='a',
                         format='%(asctime)s,%(msecs)d %(name)s %(levelname)s %(message)s',
