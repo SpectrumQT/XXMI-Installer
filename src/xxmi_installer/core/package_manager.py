@@ -146,11 +146,11 @@ class Package:
             update_progress_callback=self.notify_download_progress
         )
 
-    def save_downloaded_data(self, asset_path: Path, data):
+    def save_downloaded_data(self, asset_path: Path, data, no_verify=False):
 
         Events.Fire(Events.PackageManager.StartIntegrityVerification(asset_name='downloaded data'))
 
-        if not self.security.verify(self.signature, data):
+        if not no_verify and not self.security.verify(self.signature, data):
             raise ValueError(f'Downloaded data integrity verification failed!\n'
                              'Please restart the launcher and try again!')
 
@@ -162,7 +162,7 @@ class Package:
         Events.Fire(Events.PackageManager.StartIntegrityVerification(asset_name=asset_path.name))
 
         with open(asset_path, 'rb') as f:
-            if not self.security.verify(self.signature, f.read()):
+            if not no_verify and not self.security.verify(self.signature, f.read()):
                 raise ValueError(f'{asset_path.name} data integrity verification failed!\n'
                                  'Please restart the launcher and try again!')
 

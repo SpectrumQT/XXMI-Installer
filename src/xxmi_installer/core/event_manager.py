@@ -1,6 +1,6 @@
 import logging
 
-import app
+import core.application as application
 import core.package_manager as package_manager
 from core.packages import launcher_package as launcher_package
 from gui import events as gui_events
@@ -8,7 +8,7 @@ from gui import events as gui_events
 log = logging.getLogger(__name__)
 
 
-Application = app.ApplicationEvents
+Application = application.ApplicationEvents
 LauncherManager = launcher_package.LauncherManagerEvents
 PackageManager = package_manager.PackageManagerEvents
 GUI = gui_events.GUIEvents

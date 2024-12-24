@@ -33,6 +33,7 @@ class LauncherManagerEvents:
 @dataclass
 class LauncherManagerConfig:
     auto_update: bool = True
+    update_channel: str = 'MSI'
     installation_dir: str = ''
     create_shortcut: bool = True
     instance: str = ''
@@ -53,6 +54,8 @@ class LauncherPackage(Package):
         ))
         Events.Subscribe(Events.LauncherManager.AssertInstallationFolder,
                          lambda event: self.assert_installation_folder(event.installation_folder))
+        if Config.Launcher.update_channel == 'ZIP':
+            self.metadata.asset_name_format = 'XXMI-LAUNCHER-PACKAGE-v%s.zip'
 
     def download_latest_version(self):
         self.package_path = Path(Config.Launcher.installation_dir) / 'Resources' / 'Packages' / self.metadata.package_name
@@ -60,6 +63,10 @@ class LauncherPackage(Package):
 
     def get_installed_version(self):
         return '0.0.0'
+
+    def save_downloaded_data(self, asset_path: Path, data, no_verify=False):
+        no_verify = Config.Launcher.update_channel == 'ZIP'
+        return super().save_downloaded_data(asset_path, data, no_verify)
 
     def install_latest_version(self, clean):
         Events.Fire(Events.PackageManager.InitializeInstallation())
@@ -70,18 +77,26 @@ class LauncherPackage(Package):
 
         Events.Fire(Events.LauncherManager.StartLauncher(asset_name=self.downloaded_asset_path.name))
 
-        shortcuts_property = 'CheckBox' if Config.Launcher.create_shortcut else ''
+        if Config.Launcher.update_channel == 'MSI':
+            shortcuts_property = 'CheckBox' if Config.Launcher.create_shortcut else ''
 
-        subprocess.Popen(f'msiexec /i "{self.downloaded_asset_path}" /qr /norestart APPDIR="{Path(Config.Launcher.installation_dir)}" CREATE_SHORTCUTS="{shortcuts_property}"', shell=True)
+            subprocess.Popen(f'msiexec /i "{self.downloaded_asset_path}" /qr /norestart APPDIR="{Path(Config.Launcher.installation_dir)}" CREATE_SHORTCUTS="{shortcuts_property}"', shell=True)
 
-        installer_process_name = 'EnhancedUI.exe'
+            installer_process_name = 'EnhancedUI.exe'
 
-        Events.Fire(Events.Application.WaitForProcess(process_name=installer_process_name))
+            Events.Fire(Events.Application.WaitForProcess(process_name=installer_process_name))
 
-        result, pid = wait_for_process(installer_process_name, with_window=True, timeout=15)
-        if result == WaitResult.Timeout:
-            raise ValueError(f'Failed to start {self.downloaded_asset_path.name}!\n\n'
-                             f'Was it blocked by Antivirus software or security settings?')
+            result, pid = wait_for_process(installer_process_name, with_window=True, timeout=15)
+            if result == WaitResult.Timeout:
+                raise ValueError(f'Failed to start {self.downloaded_asset_path.name}!\n\n'
+                                 f'Was it blocked by Antivirus software or security settings?')
+
+        else:
+            Events.Fire(Events.Application.StatusUpdate(status='Deploying files...'))
+
+            self.move_contents(self.downloaded_asset_path, Path(Config.Launcher.installation_dir))
+
+            self.start_launcher()
 
     def assert_installation_folder(self, installation_folder: str):
         installation_path = Path(installation_folder)
@@ -118,7 +133,7 @@ class LauncherPackage(Package):
             link.working_directory = Config.Launcher.installation_dir
 
     def start_launcher(self):
-        launcher_path = Path(Config.Launcher.installation_dir) / 'XXMI Launcher.exe'
+        launcher_path = Path(Config.Launcher.installation_dir) / 'Resources' / 'Bin' / 'XXMI Launcher.exe'
         Events.Fire(Events.LauncherManager.StartLauncher(asset_name=launcher_path.name))
         if not launcher_path.exists():
             raise ValueError(f'Failed to locate {launcher_path.name}!\nWas it removed by your Antivirus software?')
