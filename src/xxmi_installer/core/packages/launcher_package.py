@@ -55,7 +55,7 @@ class LauncherPackage(Package):
         Events.Subscribe(Events.LauncherManager.AssertInstallationFolder,
                          lambda event: self.assert_installation_folder(event.installation_folder))
         if Config.Launcher.update_channel == 'ZIP':
-            self.metadata.asset_name_format = 'XXMI-LAUNCHER-PACKAGE-v%s.zip'
+            self.metadata.asset_name_format = 'XXMI-Launcher-Portable-v%s.zip'
 
     def download_latest_version(self):
         self.package_path = Path(Config.Launcher.installation_dir) / 'Resources' / 'Packages' / self.metadata.package_name
